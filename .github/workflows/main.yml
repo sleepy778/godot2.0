@@ -37,11 +37,9 @@ jobs:
 
       - name: Prepare deploy folder
         run: |
-          mkdir -p deploy/templates
+          mkdir deploy
           # Copy editor build output
-          cp bin/godot.web.release_debug.* deploy/
-          # Copy export templates
-          cp bin/web_* deploy/templates/
+          cp bin/* deploy/
           # Generate index.html
           cat > deploy/index.html <<'EOF'
           <!DOCTYPE html>
@@ -56,11 +54,11 @@ jobs:
             </head>
             <body>
               <canvas id="canvas"></canvas>
-              <script src="godot.web.release_debug.js"></script>
+              <script src="godot.js"></script>
               <script>
                 var engine = new Engine({
                   canvas: document.getElementById("canvas"),
-                  executable: "godot.web.release_debug.wasm"
+                  executable: "godot.editor.wasm"
                 });
                 engine.startGame();
               </script>
