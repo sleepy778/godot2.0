@@ -1,21 +1,3 @@
-let localProjectDir = null;
-
-async function requestLocalProjectFolder() {
-    if (!window.showDirectoryPicker) {
-        alert("Your browser does not support local file access!");
-        return;
-    }
-
-    try {
-        localProjectDir = await window.showDirectoryPicker();
-        alert("Local project folder selected. All project files will be saved here.");
-    } catch (err) {
-        console.error("Folder selection canceled or failed:", err);
-        alert("Failed to select local project folder.");
-    }
-}
-
-
 var Godot = (() => {
     var _scriptName = typeof document != 'undefined' ? document.currentScript?.src : undefined;
     return (
@@ -148,66 +130,50 @@ const Features = {
 };
 
 const Preloader = /** @constructor */ function () { // eslint-disable-line no-unused-vars
+	function getTrackedResponse(response, load_status) {
+		function onloadprogress(reader, controller) {
+			return reader.read().then(function (result) {
+				if (load_status.done) {
+					return Promise.resolve();
+				}
+				if (result.value) {
+					controller.enqueue(result.value);
+					load_status.loaded += result.value.length;
+				}
+				if (!result.done) {
+					return onloadprogress(reader, controller);
+				}
+				load_status.done = true;
+				return Promise.resolve();
+			});
+		}
+		const reader = response.body.getReader();
+		return new Response(new ReadableStream({
+			start: function (controller) {
+				onloadprogress(reader, controller).then(function () {
+					controller.close();
+				});
+			},
+		}), { headers: response.headers });
+	}
 
-    function getTrackedResponse(response, load_status) {
-
-        function onloadprogress(reader, controller) {
-            return reader.read().then(function (result) {
-                if (load_status.done) {
-                    return Promise.resolve();
-                }
-
-                if (result.value) {
-                    controller.enqueue(result.value);
-                    load_status.loaded += result.value.length;
-                }
-
-                if (!result.done) {
-                    return onloadprogress(reader, controller);
-                }
-
-                load_status.done = true;
-                return Promise.resolve();
-            });
-        }
-
-        const reader = response.body.getReader();
-        return new Response(new ReadableStream({
-            start: function (controller) {
-                onloadprogress(reader, controller).then(function () {
-                    controller.close();
-                });
-            },
-        }), { headers: response.headers });
-    }
-
-    async function loadFetch(file, tracker, fileSize, raw) {
-        if (!localProjectDir) throw new Error("No local folder selected!");
-
-        tracker[file] = {
-            total: fileSize || 0,
-            loaded: 0,
-            done: false,
-        };
-
-        try {
-            const fileHandle = await localProjectDir.getFileHandle(file);
-            const file = await fileHandle.getFile();
-            const buffer = new Uint8Array(await file.arrayBuffer());
-
-            tracker[file].loaded = buffer.length;
-            tracker[file].done = true;
-
-            if (raw) return buffer;
-            return buffer.buffer; // Return ArrayBuffer like the original loadFetch
-        } catch (err) {
-            tracker[file].done = true;
-            return Promise.reject(err);
-        }
-    }
-
-};
-
+	function loadFetch(file, tracker, fileSize, raw) {
+		tracker[file] = {
+			total: fileSize || 0,
+			loaded: 0,
+			done: false,
+		};
+		return fetch(file).then(function (response) {
+			if (!response.ok) {
+				return Promise.reject(new Error(`Failed loading file '${file}'`));
+			}
+			const tr = getTrackedResponse(response, tracker[file]);
+			if (raw) {
+				return Promise.resolve(tr);
+			}
+			return tr.arrayBuffer();
+		});
+	}
 
 	function retry(func, attempts = 1) {
 		function onerror(err) {
@@ -295,6 +261,7 @@ const Preloader = /** @constructor */ function () { // eslint-disable-line no-un
 		}
 		return Promise.reject(new Error('Invalid object for preloading'));
 	};
+};
 
 /**
  * An object used to configure the Engine instance based on godot export options, and to override those in custom HTML
