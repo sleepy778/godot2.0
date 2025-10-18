@@ -1,0 +1,56 @@
+name: Build Custom Godot Web Editor + Templates
+
+on:
+  push:
+    branches:
+      - builderer   # Trigger when you push changes here
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y scons python3 git
+
+      - name: Setup Emscripten
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+          echo "source $GITHUB_WORKSPACE/emsdk/emsdk_env.sh" >> $GITHUB_ENV
+
+      - name: Build Godot Web Editor + Templates
+        run: |
+          source ./emsdk/emsdk_env.sh
+          # Editor build
+          scons platform=web tools=yes target=release_debug -j$(nproc)
+          # Export templates
+          scons platform=web tools=no target=release -j$(nproc)
+          scons platform=web tools=no target=release_debug -j$(nproc)
+
+      - name: Prepare deploy folder
+        run: |
+          mkdir -p deploy/templates
+          # Copy editor (rename HTML to index.html for Vercel)
+          cp bin/godot.web.release_debug.* deploy/
+          mv deploy/godot.web.release_debug.html deploy/index.html
+          # Copy export templates
+          cp bin/web_* deploy/templates/
+
+      - name: Deploy to builds branch
+        run: |
+          cd deploy
+          git init
+          git checkout -b builds
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Deploy Godot Web Editor + Templates"
+          git push --force origin builds
