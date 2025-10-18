@@ -38,11 +38,35 @@ jobs:
       - name: Prepare deploy folder
         run: |
           mkdir -p deploy/templates
-          # Copy editor (rename HTML to index.html for Vercel)
+          # Copy editor build output
           cp bin/godot.web.release_debug.* deploy/
-          mv deploy/godot.web.release_debug.html deploy/index.html
           # Copy export templates
           cp bin/web_* deploy/templates/
+          # Generate index.html
+          cat > deploy/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>Custom Godot Web Editor</title>
+              <style>
+                html, body { margin: 0; height: 100%; overflow: hidden; background: #1e1e1e; }
+                canvas { width: 100%; height: 100%; display: block; }
+              </style>
+            </head>
+            <body>
+              <canvas id="canvas"></canvas>
+              <script src="godot.web.release_debug.js"></script>
+              <script>
+                var engine = new Engine({
+                  canvas: document.getElementById("canvas"),
+                  executable: "godot.web.release_debug.wasm"
+                });
+                engine.startGame();
+              </script>
+            </body>
+          </html>
+          EOF
 
       - name: Deploy to builds branch
         run: |
